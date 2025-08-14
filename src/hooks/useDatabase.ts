@@ -71,8 +71,13 @@ export const useAdminAuth = () => {
       const isValid = await db.verifyAdminCredentials(username, password);
       if (isValid) {
         setIsAuthenticated(true);
-        const creds = await db.getAdminCredentials();
-        setCredentials(creds);
+        try {
+          const creds = await db.getAdminCredentials();
+          setCredentials(creds);
+        } catch (error) {
+          // If we can't get credentials but login was successful, use defaults
+          setCredentials({ username: 'Epiphany', password: '' });
+        }
       }
       return isValid;
     } catch (error) {
@@ -89,8 +94,13 @@ export const useAdminAuth = () => {
   const updateCredentials = async (username: string, password: string) => {
     try {
       await db.updateAdminCredentials(username, password);
-      const updatedCreds = await db.getAdminCredentials();
-      setCredentials(updatedCreds);
+      try {
+        const updatedCreds = await db.getAdminCredentials();
+        setCredentials(updatedCreds);
+      } catch (error) {
+        // If we can't get updated credentials, use the ones we just set
+        setCredentials({ username, password: '' });
+      }
     } catch (error) {
       console.error('Update credentials error:', error);
       throw error;

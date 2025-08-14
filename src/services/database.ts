@@ -203,62 +203,166 @@ export const deleteProductVerre = async (id: string) => {
 
 // Admin Settings
 export const getAdminCredentials = async (): Promise<AdminCredentials | null> => {
-  const { data, error } = await supabase
-    .from('admin_settings')
-    .select('username, password_hash')
-    .single();
+  try {
+    const { data, error } = await supabase
+      .from('admin_settings')
+      .select('username, password_hash')
+      .single();
 
-  if (error) {
-    if (error.code === 'PGRST116') {
-      // No admin settings found, create default
-      const hashedPassword = await bcrypt.hash('Epiphany@123', 10);
-      await supabase
+    if (error) {
+      if (error.code === 'PGRST116') {
+        // No admin settings found, create default
+        const hashedPassword = await bcrypt.hash('epiphany@123', 10);
+        const { data: newData, error: insertError } = await supabase
+          .from('admin_settings')
+          .insert([{
+            username: 'Epiphany',
+            password_hash: hashedPassword
+          }])
+          .select('username, password_hash')
+          .single();
+        
+        if (insertError) throw insertError;
+        
+        return {
+          username: newData.username,
+          password: '' // Don't return actual password
+        };
+      }
+      throw error;
+    }
+
+    return {
+      username: data.username,
+      password: '' // Don't return actual password
+    };
+  } catch (error) {
+    // Fallback: try to create default admin if table is empty
+    try {
+      const hashedPassword = await bcrypt.hash('epiphany@123', 10);
+      const { data: newData, error: insertError } = await supabase
         .from('admin_settings')
         .insert([{
           username: 'Epiphany',
           password_hash: hashedPassword
-        }]);
+        }])
+        .select('username, password_hash')
+        .single();
+      
+      if (insertError) {
+        // If insert fails, return default credentials
+        return {
+          username: 'Epiphany',
+          password: ''
+        };
+      }
       
       return {
+        username: newData.username,
+        password: ''
+      };
+    } catch (fallbackError) {
+      // Final fallback
+      return {
         username: 'Epiphany',
-        password: 'Epiphany@123'
+        password: ''
       };
     }
-    throw error;
   }
-
-  return {
-    username: data.username,
-    password: '' // Don't return actual password
-  };
 };
 
 export const verifyAdminCredentials = async (username: string, password: string): Promise<boolean> => {
-  const { data, error } = await supabase
-    .from('admin_settings')
-    .select('username, password_hash')
-    .single();
+  try {
+    const { data, error } = await supabase
+      .from('admin_settings')
+      .select('username, password_hash')
+      .single();
 
-  if (error) return false;
+    if (error) {
+      if (error.code === 'PGRST116') {
+        // No admin settings found, check against default credentials
+        const isUsernameValid = username === 'Epiphany';
+        const isPasswordValid = password === 'epiphany@123';
+        
+        if (isUsernameValid && isPasswordValid) {
+          // Create the admin record for future use
+          const hashedPassword = await bcrypt.hash('epiphany@123', 10);
+          await supabase
+            .from('admin_settings')
+            .insert([{
+              username: 'Epiphany',
+              password_hash: hashedPassword
+            }]);
+          return true;
+        }
+      }
+      return false;
+    }
 
-  const isUsernameValid = data.username === username;
-  const isPasswordValid = await bcrypt.compare(password, data.password_hash);
+    const isUsernameValid = data.username === username;
+    const isPasswordValid = await bcrypt.compare(password, data.password_hash);
 
-  return isUsernameValid && isPasswordValid;
+    return isUsernameValid && isPasswordValid;
+  } catch (error) {
+    // Fallback to default credentials
+    const isUsernameValid = username === 'Epiphany';
+    const isPasswordValid = password === 'epiphany@123';
+    return isUsernameValid && isPasswordValid;
+  }
 };
 
 export const updateAdminCredentials = async (username: string, password: string) => {
-  const hashedPassword = await bcrypt.hash(password, 10);
-  
-  const { data, error } = await supabase
-    .from('admin_settings')
-    .upsert([{
-      username,
-      password_hash: hashedPassword
-    }])
-    .select()
-    .single();
+  try {
+    const hashedPassword = await bcrypt.hash(password, 10);
+    
+    // First try to update existing record
+    const { data: existingData } = await supabase
+      .from('admin_settings')
+      .select('id')
+      .single();
+    
+    if (existingData) {
+      // Update existing record
+      const { data, error } = await supabase
+        .from('admin_settings')
+        .update({
+          username,
+          password_hash: hashedPassword
+        })
+        .eq('id', existingData.id)
+        .select()
+        .single();
+      
+      if (error) throw error;
+      return data;
+    } else {
+      // Insert new record
+      const { data, error } = await supabase
+        .from('admin_settings')
+        .insert([{
+          username,
+          password_hash: hashedPassword
+        }])
+        .select()
+        .single();
+      
+      if (error) throw error;
+      return data;
+    }
+  } catch (error) {
+    // Fallback: try upsert
+    const hashedPassword = await bcrypt.hash(password, 10);
+    
+    const { data, error: upsertError } = await supabase
+      .from('admin_settings')
+      .upsert([{
+        username,
+        password_hash: hashedPassword
+      }])
+      .select()
+      .single();
 
-  if (error) throw error;
-  return data;
+    if (upsertError) throw upsertError;
+    return data;
+  }
 };

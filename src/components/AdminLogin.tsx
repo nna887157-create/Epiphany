@@ -29,6 +29,9 @@ const AdminLogin: React.FC<AdminLoginProps> = ({ onLogin, error }) => {
           <h2 className="text-xl font-semibold text-gray-700">
             Connexion Administrateur
           </h2>
+          <p className="text-sm text-gray-500 mt-2">
+            Utilisateur par défaut: Epiphany / epiphany@123
+          </p>
         </div>
 
         <form onSubmit={handleSubmit} className="space-y-6">

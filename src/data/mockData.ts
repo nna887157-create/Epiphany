@@ -209,5 +209,5 @@ export const mockProducts: Product[] = [
 
 export const defaultAdminCredentials: AdminCredentials = {
   username: 'Epiphany',
-  password: 'Epiphany@123'
+  password: 'epiphany@123'
 };
