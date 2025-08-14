@@ -1,10 +1,8 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ArrowLeft, Plus, Edit, Trash2, Save, X, Settings, LogOut, FolderPlus, Package } from 'lucide-react';
+import { ArrowLeft, Plus, Edit, Trash2, Save, X, Settings, LogOut } from 'lucide-react';
 import QRCodeManager from '../components/QRCodeManager';
 import AdminLogin from '../components/AdminLogin';
-import CategoryForm from '../components/CategoryForm';
-import ProductForm from '../components/ProductForm';
 import { useCategories, useProducts, useAdminAuth } from '../hooks/useDatabase';
 import * as db from '../services/database';
 import { Category, Product, Subcategory, Extra, Verre, AdminCredentials } from '../types';
@@ -15,7 +13,7 @@ const AdminPanel: React.FC = () => {
   const { categories, loading: categoriesLoading, refetch: refetchCategories } = useCategories();
   const { products, loading: productsLoading, refetch: refetchProducts } = useProducts();
   const [loginError, setLoginError] = useState('');
-  const [activeTab, setActiveTab] = useState<'categories' | 'products' | 'qr' | 'settings' | 'create-category' | 'create-product'>('categories');
+  const [activeTab, setActiveTab] = useState<'categories' | 'products' | 'qr' | 'settings'>('categories');
   
   // Form states
   const [editingCategory, setEditingCategory] = useState<Category | null>(null);
@@ -273,8 +271,6 @@ const AdminPanel: React.FC = () => {
             {[
               { key: 'categories', label: 'Catégories' },
               { key: 'products', label: 'Produits' },
-              { key: 'create-category', label: 'Créer Catégorie' },
-              { key: 'create-product', label: 'Créer Produit' },
               { key: 'qr', label: 'Codes QR' },
               { key: 'settings', label: 'Paramètres' }
             ].map(tab => (
@@ -419,44 +415,6 @@ const AdminPanel: React.FC = () => {
                 );
               })}
             </div>
-          </div>
-        )}
-
-        {/* Create Category Tab */}
-        {activeTab === 'create-category' && (
-          <div>
-            <div className="flex items-center gap-3 mb-6">
-              <FolderPlus className="w-6 h-6 text-amber-600" />
-              <h2 className="text-2xl font-bold text-gray-800">Créer une Nouvelle Catégorie</h2>
-            </div>
-            <CategoryForm 
-              onSuccess={() => {
-                refetchCategories();
-                setActiveTab('categories');
-              }}
-              onError={(error) => {
-                console.error('Category creation error:', error);
-              }}
-            />
-          </div>
-        )}
-
-        {/* Create Product Tab */}
-        {activeTab === 'create-product' && (
-          <div>
-            <div className="flex items-center gap-3 mb-6">
-              <Package className="w-6 h-6 text-amber-600" />
-              <h2 className="text-2xl font-bold text-gray-800">Créer un Nouveau Produit</h2>
-            </div>
-            <ProductForm 
-              onSuccess={() => {
-                refetchProducts();
-                setActiveTab('products');
-              }}
-              onError={(error) => {
-                console.error('Product creation error:', error);
-              }}
-            />
           </div>
         )}
 
