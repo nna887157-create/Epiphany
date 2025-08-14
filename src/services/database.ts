@@ -204,41 +204,18 @@ export const deleteProductVerre = async (id: string) => {
 // Admin Settings
 export const getAdminCredentials = async (): Promise<AdminCredentials | null> => {
   try {
+    // Use select() without .single() to avoid PGRST116 error when no rows exist
     const { data, error } = await supabase
       .from('admin_settings')
       .select('username, password_hash')
-      .single();
+      .limit(1);
 
     if (error) {
-      if (error.code === 'PGRST116') {
-        // No admin settings found, create default
-        const hashedPassword = await bcrypt.hash('epiphany@123', 10);
-        const { data: newData, error: insertError } = await supabase
-          .from('admin_settings')
-          .insert([{
-            username: 'Epiphany',
-            password_hash: hashedPassword
-          }])
-          .select('username, password_hash')
-          .single();
-        
-        if (insertError) throw insertError;
-        
-        return {
-          username: newData.username,
-          password: '' // Don't return actual password
-        };
-      }
       throw error;
     }
 
-    return {
-      username: data.username,
-      password: '' // Don't return actual password
-    };
-  } catch (error) {
-    // Fallback: try to create default admin if table is empty
-    try {
+    // If no data returned (empty table), create default admin
+    if (!data || data.length === 0) {
       const hashedPassword = await bcrypt.hash('epiphany@123', 10);
       const { data: newData, error: insertError } = await supabase
         .from('admin_settings')
@@ -250,7 +227,8 @@ export const getAdminCredentials = async (): Promise<AdminCredentials | null> =>
         .single();
       
       if (insertError) {
-        // If insert fails, return default credentials
+        console.error('Failed to create default admin:', insertError);
+        // Return default credentials as fallback
         return {
           username: 'Epiphany',
           password: ''
@@ -259,10 +237,44 @@ export const getAdminCredentials = async (): Promise<AdminCredentials | null> =>
       
       return {
         username: newData.username,
+        password: '' // Don't return actual password
+      };
+    }
+
+    // Return the first (and should be only) admin record
+    return {
+      username: data[0].username,
+      password: '' // Don't return actual password
+    };
+  } catch (error) {
+    console.error('Error in getAdminCredentials:', error);
+    // Final fallback: try to create default admin
+    try {
+      const hashedPassword = await bcrypt.hash('epiphany@123', 10);
+      const { data: newData, error: insertError } = await supabase
+        .from('admin_settings')
+        .insert([{
+          username: 'Epiphany',
+          password_hash: hashedPassword
+        }])
+        .select('username, password_hash');
+      
+      if (insertError) {
+        console.error('Fallback admin creation failed:', insertError);
+        // Return default credentials as last resort
+        return {
+          username: 'Epiphany',
+          password: ''
+        };
+      }
+      
+      return {
+        username: newData[0]?.username || 'Epiphany',
         password: ''
       };
     } catch (fallbackError) {
-      // Final fallback
+      console.error('Final fallback failed:', fallbackError);
+      // Return hardcoded default
       return {
         username: 'Epiphany',
         password: ''
@@ -273,19 +285,21 @@ export const getAdminCredentials = async (): Promise<AdminCredentials | null> =>
 
 export const verifyAdminCredentials = async (username: string, password: string): Promise<boolean> => {
   try {
+    // Use select() without .single() to avoid PGRST116 error
     const { data, error } = await supabase
       .from('admin_settings')
       .select('username, password_hash')
-      .single();
+      .limit(1);
 
     if (error) {
-      if (error.code === 'PGRST116') {
-        // No admin settings found, check against default credentials
-        const isUsernameValid = username === 'Epiphany';
-        const isPasswordValid = password === 'epiphany@123';
-        
-        if (isUsernameValid && isPasswordValid) {
-          // Create the admin record for future use
+      console.error('Error querying admin settings:', error);
+      // Fallback to default credentials check
+      const isUsernameValid = username === 'Epiphany';
+      const isPasswordValid = password === 'epiphany@123';
+      
+      if (isUsernameValid && isPasswordValid) {
+        // Try to create the admin record for future use
+        try {
           const hashedPassword = await bcrypt.hash('epiphany@123', 10);
           await supabase
             .from('admin_settings')
@@ -293,17 +307,45 @@ export const verifyAdminCredentials = async (username: string, password: string)
               username: 'Epiphany',
               password_hash: hashedPassword
             }]);
-          return true;
+        } catch (insertError) {
+          console.error('Failed to create admin record:', insertError);
         }
+        return true;
       }
       return false;
     }
 
-    const isUsernameValid = data.username === username;
-    const isPasswordValid = await bcrypt.compare(password, data.password_hash);
+    // If no data returned (empty table), check against defaults and create record
+    if (!data || data.length === 0) {
+      const isUsernameValid = username === 'Epiphany';
+      const isPasswordValid = password === 'epiphany@123';
+      
+      if (isUsernameValid && isPasswordValid) {
+        // Create the admin record
+        try {
+          const hashedPassword = await bcrypt.hash('epiphany@123', 10);
+          await supabase
+            .from('admin_settings')
+            .insert([{
+              username: 'Epiphany',
+              password_hash: hashedPassword
+            }]);
+        } catch (insertError) {
+          console.error('Failed to create admin record:', insertError);
+        }
+        return true;
+      }
+      return false;
+    }
+
+    // Verify against stored credentials
+    const adminRecord = data[0];
+    const isUsernameValid = adminRecord.username === username;
+    const isPasswordValid = await bcrypt.compare(password, adminRecord.password_hash);
 
     return isUsernameValid && isPasswordValid;
   } catch (error) {
+    console.error('Error in verifyAdminCredentials:', error);
     // Fallback to default credentials
     const isUsernameValid = username === 'Epiphany';
     const isPasswordValid = password === 'epiphany@123';
@@ -315,13 +357,13 @@ export const updateAdminCredentials = async (username: string, password: string)
   try {
     const hashedPassword = await bcrypt.hash(password, 10);
     
-    // First try to update existing record
-    const { data: existingData } = await supabase
+    // Check if any admin record exists
+    const { data: existingData, error: selectError } = await supabase
       .from('admin_settings')
       .select('id')
-      .single();
+      .limit(1);
     
-    if (existingData) {
+    if (!selectError && existingData && existingData.length > 0) {
       // Update existing record
       const { data, error } = await supabase
         .from('admin_settings')
@@ -329,7 +371,7 @@ export const updateAdminCredentials = async (username: string, password: string)
           username,
           password_hash: hashedPassword
         })
-        .eq('id', existingData.id)
+        .eq('id', existingData[0].id)
         .select()
         .single();
       
@@ -350,19 +392,7 @@ export const updateAdminCredentials = async (username: string, password: string)
       return data;
     }
   } catch (error) {
-    // Fallback: try upsert
-    const hashedPassword = await bcrypt.hash(password, 10);
-    
-    const { data, error: upsertError } = await supabase
-      .from('admin_settings')
-      .upsert([{
-        username,
-        password_hash: hashedPassword
-      }])
-      .select()
-      .single();
-
-    if (upsertError) throw upsertError;
-    return data;
+    console.error('Error in updateAdminCredentials:', error);
+    throw error;
   }
 };
