@@ -4,29 +4,32 @@ import bcrypt from 'bcryptjs';
 
 // Categories
 export const getCategories = async (): Promise<Category[]> => {
-  const { data: categories, error } = await supabase
+  const { data, error } = await supabase
     .from('categories')
-    .select('*')
+    .select(`
+      id,
+      name,
+      image,
+      created_at,
+      updated_at,
+      subcategories (
+        id,
+        name,
+        category_id
+      )
+    `)
     .order('created_at');
 
-  if (error) throw error;
+  if (error) {
+    console.error('Error fetching categories:', error);
+    throw error;
+  }
 
-  const categoriesWithSubcategories = await Promise.all(
-    categories.map(async (category) => {
-      const { data: subcategories } = await supabase
-        .from('subcategories')
-        .select('*')
-        .eq('category_id', category.id)
-        .order('created_at');
-
-      return {
-        ...category,
-        subcategories: subcategories || []
-      };
-    })
-  );
-
-  return categoriesWithSubcategories;
+  // Transform the data to match our Category interface
+  return data.map(category => ({
+    ...category,
+    subcategories: category.subcategories || []
+  }));
 };
 
 export const createCategory = async (category: Omit<Category, 'id' | 'subcategories'>) => {
